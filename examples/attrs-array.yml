@@ -1,0 +1,7 @@
+---
+  - 
+    path: "/Users/glerchundi/Projects/Coding/go/src/github.com/glerchundi/fix-attrs/examples/attrs-array.json"
+    attr: "501:20:0644"
+  - 
+    path: "/Users/glerchundi/Projects/Coding/go/src/github.com/glerchundi/fix-attrs/examples/attrs-array.yml"
+    attr: "501:20:0644"

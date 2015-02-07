@@ -1,0 +1,16 @@
+language: go
+
+go: 1.4
+
+branches:
+  only:
+    - master
+
+install:
+  - export PATH=$PATH:$HOME/gopath/bin
+  - go get github.com/tools/godep
+  - godep restore
+
+#script:
+#  - go test
+#  - test -z "$(go fmt ./...)"

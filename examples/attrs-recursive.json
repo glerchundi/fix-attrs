@@ -1,0 +1,6 @@
+[
+  {
+    "path": "/etc/s6/.s6-svscan/finish",
+    "attr": "101:101:0644"
+  }
+]

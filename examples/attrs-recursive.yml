@@ -1,0 +1,6 @@
+---
+  -
+    path: "./examples"
+    recursive: true
+    attr-dir: "glerchundi:staff:0700"
+    attr-file: "glerchundi:staff:0600"

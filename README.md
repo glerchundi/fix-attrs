@@ -27,4 +27,4 @@ done
 
 Please see `examples/` in order to understand how does configuration file works. attr follows this pattern: `uid:gid:perm` where perm is written in octal as if it was typed in a shell.
 
-`uid` and `gid` are resolved following this rules: [http://www.gnu.org/software/coreutils/manual/html_node/Disambiguating-names-and-IDs.html](Disambiguating user names and IDs)
+`uid` and `gid` are resolved following this rules: [Disambiguating user names and IDs](http://www.gnu.org/software/coreutils/manual/html_node/Disambiguating-names-and-IDs.html)

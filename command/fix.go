@@ -73,8 +73,9 @@ func handleFix(c *cli.Context) {
 		format = filepath.Ext(cfgPath)
 		if (format != "") {
 			format = format[1:]
+		} else {
+			format = Json
 		}
-		format = Json
 	}
 	format = strings.ToLower(format)
 

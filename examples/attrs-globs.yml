@@ -1,0 +1,4 @@
+---
+  -
+    path: "/etc/s6/*/finish"
+    attr: "glerchundi:staff:0755"

@@ -33,13 +33,17 @@ var gidmap map[string]idOrError
 type key string
 type value struct {
 	recursive bool
-	dirAttr attr
-	fileAttr attr
+	attrs     attrtuple
 }
 
 type attr struct {
 	uid, gid int
 	perm os.FileMode
+}
+
+type attrtuple struct {
+	dirAttr attr
+	fileAttr attr
 }
 
 func NewFixCommand() cli.Command {
@@ -89,7 +93,24 @@ func handleFix(c *cli.Context) {
 	// start fixin!
 	m = parseFile(cfgPath, format)
 	for k, v := range m {
-		if (v.recursive) {
+		if !v.recursive {
+			files := make([]string, 0)
+			if (strings.Contains(k, "*")) {
+				files, err = filepath.Glob(k); if err != nil {
+					log.Fatal(err.Error())
+				}
+			} else {
+				files = append(files, k)
+			}
+			for _, f := range files {
+				info, err := os.Stat(f); if err != nil {
+					log.Fatal(fmt.Sprintf("no such file or directory: %s", k))
+				}
+				err = changeOwnershipAndMode(f, info, v); if err != nil {
+					log.Fatal(err.Error())
+				}
+			}
+		} else {
 			walk := func(path string, info os.FileInfo, err error) error {
 				if (err != nil) {
 					return err
@@ -102,13 +123,6 @@ func handleFix(c *cli.Context) {
 			err = filepath.Walk(k, walk); if err != nil {
 				log.Fatal(err.Error())
 			}
-		} else {
-			info, err := os.Stat(k); if err != nil {
-				log.Fatal(fmt.Sprintf("no such file or directory: %s", k))
-			}
-			err = changeOwnershipAndMode(k, info, v); if err != nil {
-				log.Fatal(err.Error())
-			}
 		}
 	}
 }
@@ -118,9 +132,9 @@ func changeOwnershipAndMode(path string, info os.FileInfo, v value) error {
 	var attr attr
 
 	if info.IsDir() {
-		attr = v.dirAttr
+		attr = v.attrs.dirAttr
 	} else {
-		attr = v.fileAttr
+		attr = v.attrs.fileAttr
 	}
 	err = os.Chown(path, attr.uid, attr.gid); if err != nil {
 		return err
@@ -150,6 +164,10 @@ func parseContent(d []byte, format string) map[string]value {
 		log.Fatal("please provide a valid format")
 	}
 
+	if i == nil {
+		log.Fatal("unable to parse, no content or invalid format provided.")
+	}
+
 	fm := make(map[string]value)
 	iterRoot(i, fm)
 	return fm
@@ -177,26 +195,19 @@ func iterFile(parentPath string, m map[string]interface{}, fm map[string]value) 
 		recursive = recursiveVal
 	}
 
+	/*
+	TODO: duplicate file/path's?
+	_, ok := fm[fullPath]; if ok {
+		log.Fatal("duplicate path: ", fullPath)
+	}
+	*/
 	fullPath := path.Join(parentPath, pathVal)
-	if recursive {
-		attrdirval, err := attrval(m, "attr-dir"); if err != nil {
-			log.Fatal(err.Error())
-		}
-		attrfileval, err := attrval(m, "attr-file"); if err != nil {
-			log.Fatal(err.Error())
-		}
-		fm[fullPath] = value { recursive: true, dirAttr: attrdirval, fileAttr: attrfileval }
-	} else {
-		/*
-		TODO: duplicate file/path's?
-		_, ok := fm[fullPath]; if ok {
-			log.Fatal("duplicate path: ", fullPath)
-		}
-		*/
-		attrval, err := attrval(m, "attr"); if err != nil {
-			log.Fatal(err.Error())
-		}
-		fm[fullPath] = value { recursive: false, dirAttr: attrval, fileAttr: attrval }
+	t, err := attrtupleval(m); if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	fm[fullPath] = value { recursive: recursive, attrs: t }
+	if !recursive {
 		files, err := arrayval(m, "files"); if err == nil {
 			for _, i := range files {
 				iterFile(fullPath, prepareFile(i), fm)
@@ -333,6 +344,20 @@ func attrval(m map[string]interface{}, key string) (attr, error) {
 	}
 
 	return attr { uid: uid, gid: gid, perm: perm }, nil
+}
+
+func attrtupleval(m map[string]interface{}) (attrtuple, error) {
+	a, err := attrval(m, "attr")
+	if err == nil {
+		return attrtuple { dirAttr: a, fileAttr: a }, nil
+	}
+	ad, err := attrval(m, "attr-dir"); if err != nil {
+		return attrtuple{}, err
+	}
+	af, err := attrval(m, "attr-file"); if err != nil {
+		return attrtuple{}, err
+	}
+	return attrtuple { dirAttr: ad, fileAttr: af }, nil
 }
 
 func arrayval(m map[string]interface{}, key string) ([]interface{}, error) {

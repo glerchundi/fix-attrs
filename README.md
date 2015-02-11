@@ -1,4 +1,4 @@
-# fix-attrs
+# fix-attrs [![Build Status](https://travis-ci.org/glerchundi/fix-attrs.svg)](https://travis-ci.org/glerchundi/fix-attrs)
 modifies file attributes (ownership &amp; permission) based on a configuration file
 
 Provide all required arguments:

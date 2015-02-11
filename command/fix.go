@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"os/user"
 	"errors"
 	"path"
 	"path/filepath"
@@ -16,7 +15,7 @@ import (
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/codegangsta/cli"
-	"github.com/glerchundi/fix-attrs/os/group"
+	identity "github.com/glerchundi/fix-attrs/os"
 )
 
 const (
@@ -277,8 +276,8 @@ func uidval(k string) (int, error) {
 
 func uidval_(v string) (int, error) {
 	if (!strings.HasPrefix(v, "+")) {
-		u, err := user.Lookup(v); if err == nil {
-			v = u.Uid
+		i, err := identity.LookupUsername(v); if err == nil {
+			return i.Id, nil
 		}
 	} else {
 		v = v[1:]
@@ -298,8 +297,8 @@ func gidval(k string) (int, error) {
 
 func gidval_(v string) (int, error) {
 	if (!strings.HasPrefix(v, "+")) {
-		g, err := group.Lookup(v); if err == nil {
-			return g.Gid, nil
+		i, err := identity.LookupGroupname(v); if err == nil {
+			return i.Id, nil
 		}
 	} else {
 		v = v[1:]

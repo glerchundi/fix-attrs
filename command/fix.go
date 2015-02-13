@@ -5,11 +5,10 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"errors"
 	"path"
 	"path/filepath"
-	"strings"
 	"strconv"
+	"strings"
 
 	json "encoding/json"
 	yaml "gopkg.in/yaml.v2"
@@ -19,14 +18,15 @@ import (
 )
 
 const (
-	Json    = "json"
-	Yaml    = "yml"
+	JSON = "json"
+	YAML = "yml"
 )
 
 type idOrError struct {
 	id  int
 	err error
 }
+
 var uidmap map[string]idOrError
 var gidmap map[string]idOrError
 
@@ -38,19 +38,19 @@ type value struct {
 
 type attr struct {
 	uid, gid int
-	perm os.FileMode
+	perm     os.FileMode
 }
 
 type attrtuple struct {
-	dirAttr attr
+	dirAttr  attr
 	fileAttr attr
 }
 
 func NewFixCommand() cli.Command {
 	return cli.Command{
-		Name:   "fix",
-		Usage:  "fixes attributes",
-		Flags:  []cli.Flag{
+		Name:  "fix",
+		Usage: "fixes attributes",
+		Flags: []cli.Flag{
 			cli.StringFlag{
 				Name:  "format",
 				Value: "",
@@ -72,12 +72,12 @@ func handleFix(c *cli.Context) {
 	}
 
 	// format
-	if (format == "") {
+	if format == "" {
 		format = filepath.Ext(cfgPath)
-		if (format != "") {
+		if format != "" {
 			format = format[1:]
 		} else {
-			format = Json
+			format = JSON
 		}
 	}
 	format = strings.ToLower(format)
@@ -94,33 +94,38 @@ func handleFix(c *cli.Context) {
 	m = parseFile(cfgPath, format)
 	for k, v := range m {
 		if !v.recursive {
-			files := make([]string, 0)
-			if (strings.Contains(k, "*")) {
-				files, err = filepath.Glob(k); if err != nil {
+			var files []string
+			if strings.Contains(k, "*") {
+				files, err = filepath.Glob(k)
+				if err != nil {
 					log.Fatal(err.Error())
 				}
 			} else {
 				files = append(files, k)
 			}
 			for _, f := range files {
-				info, err := os.Stat(f); if err != nil {
+				info, err := os.Stat(f)
+				if err != nil {
 					log.Fatal(fmt.Sprintf("no such file or directory: %s", k))
 				}
-				err = changeOwnershipAndMode(f, info, v); if err != nil {
+				err = changeOwnershipAndMode(f, info, v)
+				if err != nil {
 					log.Fatal(err.Error())
 				}
 			}
 		} else {
 			walk := func(path string, info os.FileInfo, err error) error {
-				if (err != nil) {
+				if err != nil {
 					return err
 				}
-				err = changeOwnershipAndMode(path, info, v); if err != nil {
+				err = changeOwnershipAndMode(path, info, v)
+				if err != nil {
 					return err
 				}
 				return nil
 			}
-			err = filepath.Walk(k, walk); if err != nil {
+			err = filepath.Walk(k, walk)
+			if err != nil {
 				log.Fatal(err.Error())
 			}
 		}
@@ -136,10 +141,12 @@ func changeOwnershipAndMode(path string, info os.FileInfo, v value) error {
 	} else {
 		attr = v.attrs.fileAttr
 	}
-	err = os.Chown(path, attr.uid, attr.gid); if err != nil {
+	err = os.Chown(path, attr.uid, attr.gid)
+	if err != nil {
 		return err
 	}
-	err = os.Chmod(path, attr.perm); if err != nil {
+	err = os.Chmod(path, attr.perm)
+	if err != nil {
 		return err
 	}
 
@@ -147,7 +154,8 @@ func changeOwnershipAndMode(path string, info os.FileInfo, v value) error {
 }
 
 func parseFile(f string, format string) map[string]value {
-	d, err := ioutil.ReadFile(f); if err != nil {
+	d, err := ioutil.ReadFile(f)
+	if err != nil {
 		log.Fatal("unable to open file: ", f)
 	}
 	return parseContent(d, format)
@@ -156,9 +164,9 @@ func parseFile(f string, format string) map[string]value {
 func parseContent(d []byte, format string) map[string]value {
 	var i interface{}
 	switch format {
-	case Json:
+	case JSON:
 		json.Unmarshal([]byte(d), &i)
-	case Yaml:
+	case YAML:
 		yaml.Unmarshal([]byte(d), &i)
 	default:
 		log.Fatal("please provide a valid format")
@@ -176,9 +184,9 @@ func parseContent(d []byte, format string) map[string]value {
 func iterRoot(m interface{}, fm map[string]value) {
 	switch mm := m.(type) {
 	case []interface{}:
-		for _, v := range mm {
-			iterRoot(v, fm)
-		}
+	for _, v := range mm {
+		iterRoot(v, fm)
+	}
 	case map[string]interface{}, map[interface{}]interface{}:
 		iterFile("", prepareFile(mm), fm)
 	default:
@@ -187,28 +195,32 @@ func iterRoot(m interface{}, fm map[string]value) {
 }
 
 func iterFile(parentPath string, m map[string]interface{}, fm map[string]value) {
-	pathVal, err := stringval(m, "path"); if err != nil {
+	pathVal, err := stringval(m, "path")
+	if err != nil {
 		log.Fatal(err.Error())
 	}
 	recursive := false
-	recursiveVal, err := boolval(m, "recursive"); if err == nil {
+	recursiveVal, err := boolval(m, "recursive")
+	if err == nil {
 		recursive = recursiveVal
 	}
 
 	/*
-	TODO: duplicate file/path's?
-	_, ok := fm[fullPath]; if ok {
-		log.Fatal("duplicate path: ", fullPath)
-	}
+		TODO: duplicate file/path's?
+		_, ok := fm[fullPath]; if ok {
+			log.Fatal("duplicate path: ", fullPath)
+		}
 	*/
 	fullPath := path.Join(parentPath, pathVal)
-	t, err := attrtupleval(m); if err != nil {
+	t, err := attrtupleval(m)
+	if err != nil {
 		log.Fatal(err.Error())
 	}
 
-	fm[fullPath] = value { recursive: recursive, attrs: t }
+	fm[fullPath] = value{recursive: recursive, attrs: t}
 	if !recursive {
-		files, err := arrayval(m, "files"); if err == nil {
+		files, err := arrayval(m, "files")
+		if err == nil {
 			for _, i := range files {
 				iterFile(fullPath, prepareFile(i), fm)
 			}
@@ -229,31 +241,36 @@ func prepareFile(i interface{}) map[string]interface{} {
 }
 
 func val(m map[string]interface{}, key string) (interface{}, error) {
-	i, ok := m[key]; if ok {
+	i, ok := m[key]
+	if ok {
 		return i, nil
 	}
 
-	return "", errors.New(fmt.Sprintf("Key not found: %s", key))
+	return "", fmt.Errorf("Key not found: %s", key)
 }
 
 func stringval(m map[string]interface{}, key string) (string, error) {
-	i, err := val(m, key); if err != nil {
+	i, err := val(m, key)
+	if err != nil {
 		return "", err
 	}
-	s, ok := i.(string); if !ok {
-		return "", errors.New(fmt.Sprintf("Unable to cast to string: %s", key))
+	s, ok := i.(string)
+	if !ok {
+		return "", fmt.Errorf("Unable to cast to string: %s", key)
 	}
 
 	return s, nil
 }
 
 func boolval(m map[string]interface{}, key string) (bool, error) {
-	i, err := val(m, key); if err != nil {
+	i, err := val(m, key)
+	if err != nil {
 		return false, err
 	}
 
-	bv, ok := i.(bool); if !ok {
-		return false, errors.New(fmt.Sprintf("Unable to cast to bool: %s", key))
+	bv, ok := i.(bool)
+	if !ok {
+		return false, fmt.Errorf("Unable to cast to bool: %s", key)
 	}
 	return bv, nil
 }
@@ -277,18 +294,20 @@ func boolval(m map[string]interface{}, key string) (bool, error) {
 // user or group name. This syntax is accepted on most common Unix systems, but not on Solaris 10.
 
 func uidval(k string) (int, error) {
-	v, ok := uidmap[k]; if ok {
+	v, ok := uidmap[k]
+	if ok {
 		return v.id, v.err
 	}
-	id, err := uidval_(k)
-	uidmap[k] = idOrError { id: id, err: err }
+	id, err := uidLookup(k)
+	uidmap[k] = idOrError{id: id, err: err}
 	return id, err
 }
 
-func uidval_(v string) (int, error) {
-	if (!strings.HasPrefix(v, "+")) {
-		i, err := identity.LookupUsername(v); if err == nil {
-			return i.Id, nil
+func uidLookup(v string) (int, error) {
+	if !strings.HasPrefix(v, "+") {
+		i, err := identity.LookupUsername(v)
+		if err == nil {
+			return i.ID, nil
 		}
 	} else {
 		v = v[1:]
@@ -298,18 +317,20 @@ func uidval_(v string) (int, error) {
 }
 
 func gidval(k string) (int, error) {
-	v, ok := gidmap[k]; if ok {
+	v, ok := gidmap[k]
+	if ok {
 		return v.id, v.err
 	}
-	id, err := gidval_(k)
-	gidmap[k] = idOrError { id: id, err: err }
+	id, err := gidvalLookup(k)
+	gidmap[k] = idOrError{id: id, err: err}
 	return id, err
 }
 
-func gidval_(v string) (int, error) {
-	if (!strings.HasPrefix(v, "+")) {
-		i, err := identity.LookupGroupname(v); if err == nil {
-			return i.Id, nil
+func gidvalLookup(v string) (int, error) {
+	if !strings.HasPrefix(v, "+") {
+		i, err := identity.LookupGroupname(v)
+		if err == nil {
+			return i.ID, nil
 		}
 	} else {
 		v = v[1:]
@@ -319,53 +340,62 @@ func gidval_(v string) (int, error) {
 }
 
 func permval(v string) (os.FileMode, error) {
-	p, err := strconv.ParseUint(v, 8, 32); if err != nil {
+	p, err := strconv.ParseUint(v, 8, 32)
+	if err != nil {
 		return os.FileMode(0), err
 	}
 	return os.FileMode(p), nil
 }
 
 func attrval(m map[string]interface{}, key string) (attr, error) {
-	v, err := stringval(m, key); if err != nil {
+	v, err := stringval(m, key)
+	if err != nil {
 		return attr{}, err
 	}
 	parts := strings.Split(v, ":")
-	if (len(parts) != 3) {
-		return attr{}, errors.New(fmt.Sprintf("Unable to parse attributes: %s", key))
+	if len(parts) != 3 {
+		return attr{}, fmt.Errorf("Unable to parse attributes: %s", key)
 	}
-	uid, err := uidval(parts[0]); if err != nil {
+	uid, err := uidval(parts[0])
+	if err != nil {
 		return attr{}, err
 	}
-	gid, err := gidval(parts[1]); if err != nil {
+	gid, err := gidval(parts[1])
+	if err != nil {
 		return attr{}, err
 	}
-	perm, err := permval(parts[2]); if err != nil {
+	perm, err := permval(parts[2])
+	if err != nil {
 		return attr{}, err
 	}
 
-	return attr { uid: uid, gid: gid, perm: perm }, nil
+	return attr{uid: uid, gid: gid, perm: perm}, nil
 }
 
 func attrtupleval(m map[string]interface{}) (attrtuple, error) {
 	a, err := attrval(m, "attr")
 	if err == nil {
-		return attrtuple { dirAttr: a, fileAttr: a }, nil
+		return attrtuple{dirAttr: a, fileAttr: a}, nil
 	}
-	ad, err := attrval(m, "attr-dir"); if err != nil {
+	ad, err := attrval(m, "attr-dir")
+	if err != nil {
 		return attrtuple{}, err
 	}
-	af, err := attrval(m, "attr-file"); if err != nil {
+	af, err := attrval(m, "attr-file")
+	if err != nil {
 		return attrtuple{}, err
 	}
-	return attrtuple { dirAttr: ad, fileAttr: af }, nil
+	return attrtuple{dirAttr: ad, fileAttr: af}, nil
 }
 
 func arrayval(m map[string]interface{}, key string) ([]interface{}, error) {
-	i, err := val(m, key); if err != nil {
+	i, err := val(m, key)
+	if err != nil {
 		return nil, err
 	}
-	v, ok := i.([]interface {}); if !ok {
-		return nil, errors.New(fmt.Sprintf("Unable to cast to array: %s", key))
+	v, ok := i.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("Unable to cast to array: %s", key)
 	}
 	return v, nil
 }
@@ -373,10 +403,12 @@ func arrayval(m map[string]interface{}, key string) ([]interface{}, error) {
 func fromYamlMap(m map[interface{}]interface{}) map[string]interface{} {
 	r := make(map[string]interface{})
 	for k, v := range m {
-		ky, ok := k.(string); if !ok {
+		ky, ok := k.(string)
+		if !ok {
 			fmt.Println("key is not of string type")
 		}
-		_, ok = r[ky]; if ok {
+		_, ok = r[ky]
+		if ok {
 			fmt.Println("key already exists")
 		}
 		r[ky] = v

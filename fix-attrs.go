@@ -1,9 +1,9 @@
 package main
 
 import (
-	"os"
 	"github.com/codegangsta/cli"
 	"github.com/glerchundi/fix-attrs/command"
+	"os"
 )
 
 func main() {

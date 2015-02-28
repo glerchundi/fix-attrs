@@ -17,7 +17,7 @@ OS=(linux darwin)
 for i in "${OS[@]}"; do
     CGO_ENABLED=0 GOOS=$i GOARCH=amd64 \
     go build                           \
-      -o fix-attrs-0.3.0-$i-amd64      \
+      -o fix-attrs-0.4.0-$i-amd64      \
       -a                               \
       -tags netgo                      \
       -ldflags '-w'                    \

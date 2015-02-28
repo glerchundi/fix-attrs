@@ -5,16 +5,15 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	json "encoding/json"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/codegangsta/cli"
-	identity "github.com/glerchundi/fix-attrs/os"
 )
 
 const (
@@ -37,8 +36,8 @@ type value struct {
 }
 
 type attr struct {
-	uid, gid int
-	perm     os.FileMode
+	uid, gid string
+	perm     string
 }
 
 type attrtuple struct {
@@ -56,15 +55,42 @@ func NewFixCommand() cli.Command {
 				Value: "",
 				Usage: "file format (json, yaml), defaults to json",
 			},
+			cli.StringFlag{
+				Name:  "chown-bin",
+				Value: "chown",
+				Usage: "chown binary",
+			},
+			cli.StringFlag{
+				Name:  "chmod-bin",
+				Value: "chmod",
+				Usage: "chmod binary",
+			},
 		},
 		Action: handleFix,
 	}
 }
 
 func handleFix(c *cli.Context) {
+	// error
+	var err error
+
 	// params
 	format := c.String("format")
+	chownBin := c.String("chown-bin")
+	chmodBin := c.String("chmod-bin")
 	cfgPath := c.Args().First()
+
+	// chown binary path
+	chownPath, err := exec.LookPath(chownBin)
+	if err != nil {
+		log.Fatal("please provide a valid chown binary path")
+	}
+
+	// chmod binary path
+	chmodPath, err := exec.LookPath(chmodBin)
+	if err != nil {
+		log.Fatal("please provide a valid chmod binary path")
+	}
 
 	// cfg file
 	if !fileExists(cfgPath) {
@@ -83,7 +109,6 @@ func handleFix(c *cli.Context) {
 	format = strings.ToLower(format)
 
 	// loop parameters
-	var err error
 	var m map[string]value
 
 	// uid/gid cache
@@ -108,7 +133,7 @@ func handleFix(c *cli.Context) {
 				if err != nil {
 					log.Fatal(fmt.Sprintf("no such file or directory: %s", k))
 				}
-				err = changeOwnershipAndMode(f, info, v)
+				err = changeOwnershipAndMode(chownPath, chmodPath, f, info, v)
 				if err != nil {
 					log.Fatal(err.Error())
 				}
@@ -118,7 +143,7 @@ func handleFix(c *cli.Context) {
 				if err != nil {
 					return err
 				}
-				err = changeOwnershipAndMode(path, info, v)
+				err = changeOwnershipAndMode(chownPath, chmodPath, path, info, v)
 				if err != nil {
 					return err
 				}
@@ -132,7 +157,21 @@ func handleFix(c *cli.Context) {
 	}
 }
 
-func changeOwnershipAndMode(path string, info os.FileInfo, v value) error {
+func execCommand(binPath string, args ...string) error {
+	cmd := exec.Command(binPath, args...)
+	err := cmd.Start()
+	if err != nil {
+		return err
+	}
+	err = cmd.Wait()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func changeOwnershipAndMode(chownPath, chmodPath string,
+	path string, info os.FileInfo, v value) error {
 	var err error
 	var attr attr
 
@@ -141,11 +180,11 @@ func changeOwnershipAndMode(path string, info os.FileInfo, v value) error {
 	} else {
 		attr = v.attrs.fileAttr
 	}
-	err = os.Chown(path, attr.uid, attr.gid)
+	err = execCommand(chownPath, attr.uid+":"+attr.gid, path)
 	if err != nil {
 		return err
 	}
-	err = os.Chmod(path, attr.perm)
+	err = execCommand(chmodPath, attr.perm, path)
 	if err != nil {
 		return err
 	}
@@ -275,99 +314,20 @@ func boolval(m map[string]interface{}, key string) (bool, error) {
 	return bv, nil
 }
 
-// Disambiguating user names and IDs
-// http://www.gnu.org/software/coreutils/manual/html_node/Disambiguating-names-and-IDs.html
-// Since the user and group arguments to these commands may be specified as names or numeric IDs, there is an apparent
-// ambiguity. What if a user or group name is a string of digits? 1 Should the command interpret it as a user name or
-// as an ID? POSIX requires that these commands first attempt to resolve the specified string as a name, and only once
-// that fails, then try to interpret it as an ID. This is troublesome when you want to specify a numeric ID, say 42, and
-// it must work even in a pathological situation where ‘42’ is a user name that maps to some other user ID, say 1000.
-// Simply invoking chown 42 F, will set Fs owner ID to 1000—not what you intended.
-
-// GNU chown, chgrp, chroot, and id provide a way to work around this, that at the same time may result in a significant
-// performance improvement by eliminating a database look-up. Simply precede each numeric user ID and/or group ID with
-// a ‘+’, in order to force its interpretation as an integer:
-// chown +42 F
-// chgrp +$numeric_group_id another-file
-// chown +0:+0 /
-// The name look-up process is skipped for each ‘+’-prefixed string, because a string containing ‘+’ is never a valid
-// user or group name. This syntax is accepted on most common Unix systems, but not on Solaris 10.
-
-func uidval(k string) (int, error) {
-	v, ok := uidmap[k]
-	if ok {
-		return v.id, v.err
-	}
-	id, err := uidLookup(k)
-	uidmap[k] = idOrError{id: id, err: err}
-	return id, err
-}
-
-func uidLookup(v string) (int, error) {
-	if !strings.HasPrefix(v, "+") {
-		i, err := identity.LookupUsername(v)
-		if err == nil {
-			return i.ID, nil
-		}
-	} else {
-		v = v[1:]
-	}
-
-	return strconv.Atoi(v)
-}
-
-func gidval(k string) (int, error) {
-	v, ok := gidmap[k]
-	if ok {
-		return v.id, v.err
-	}
-	id, err := gidvalLookup(k)
-	gidmap[k] = idOrError{id: id, err: err}
-	return id, err
-}
-
-func gidvalLookup(v string) (int, error) {
-	if !strings.HasPrefix(v, "+") {
-		i, err := identity.LookupGroupname(v)
-		if err == nil {
-			return i.ID, nil
-		}
-	} else {
-		v = v[1:]
-	}
-
-	return strconv.Atoi(v)
-}
-
-func permval(v string) (os.FileMode, error) {
-	p, err := strconv.ParseUint(v, 8, 32)
-	if err != nil {
-		return os.FileMode(0), err
-	}
-	return os.FileMode(p), nil
-}
-
 func attrval(m map[string]interface{}, key string) (attr, error) {
 	v, err := stringval(m, key)
 	if err != nil {
 		return attr{}, err
 	}
+
 	parts := strings.Split(v, ":")
 	if len(parts) != 3 {
 		return attr{}, fmt.Errorf("Unable to parse attributes: %s", key)
 	}
-	uid, err := uidval(parts[0])
-	if err != nil {
-		return attr{}, err
-	}
-	gid, err := gidval(parts[1])
-	if err != nil {
-		return attr{}, err
-	}
-	perm, err := permval(parts[2])
-	if err != nil {
-		return attr{}, err
-	}
+
+	uid  := parts[0]
+	gid  := parts[1]
+	perm := parts[2]
 
 	return attr{uid: uid, gid: gid, perm: perm}, nil
 }
